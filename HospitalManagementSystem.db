@@ -1,0 +1,233 @@
+CREATE DATABASE HospitalManagementSystem;
+
+USE HospitalManagementSystem;
+
+-- Patient Table
+CREATE TABLE patient(
+    email VARCHAR(50) PRIMARY KEY,
+    password VARCHAR(50) NOT NULL,
+    name VARCHAR(50) NOT NULL,
+    address VARCHAR(80) NOT NULL,
+    gender VARCHAR(20) NOT NULL,
+    patient_id INT(15) NOT NULL AUTO_INCREMENT,
+    age INT(10) NOT NULL,
+    contact_number INT(20) NOT NULL,
+    UNIQUE (patient_id)
+);
+
+
+-- Medical History Table
+CREATE TABLE MedicalHistory(
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    date DATE NOT NULL,
+    health_condition VARCHAR(100) NOT NULL,
+    surgeries VARCHAR(100) NOT NULL,
+    medication VARCHAR(100) NOT NULL
+);
+
+-- Doctor Table
+CREATE TABLE Doctor(
+    email VARCHAR(50) PRIMARY KEY,
+    password VARCHAR(30) NOT NULL,
+    name VARCHAR(30) NOT NULL,
+    gender VARCHAR(20) NOT NULL,
+    doctor_id INT NOT NULL AUTO_INCREMENT,
+    UNIQUE KEY (doctor_id)
+);
+
+
+-- Appointment Table
+CREATE TABLE Appointment(
+    id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    date DATE NOT NULL,
+    starttime TIME NOT NULL,
+    endtime TIME NOT NULL,
+    status VARCHAR(15) NOT NULL DEFAULT 'Scheduled'
+);
+
+-- PatientAttendAppointment Table
+CREATE TABLE PatientAttendAppointment(
+    patient VARCHAR(50) NOT NULL,
+    appt INT NOT NULL,
+    concerns VARCHAR(40) NOT NULL,
+    symptoms VARCHAR(40) NOT NULL,
+    FOREIGN KEY (patient) REFERENCES patient(email) ON DELETE CASCADE,
+    FOREIGN KEY (appt) REFERENCES Appointment(id) ON DELETE CASCADE,
+    PRIMARY KEY (patient, appt)
+);
+
+-- Schedule Table
+CREATE TABLE Schedule(
+    id INT NOT NULL AUTO_INCREMENT,
+    starttime TIME NOT NULL,
+    endtime TIME NOT NULL,
+    breaktime TIME NOT NULL,
+    day VARCHAR(20) NOT NULL,
+    PRIMARY KEY (id, starttime, endtime, breaktime, day)
+);
+
+-- PatientFillHistory Table
+CREATE TABLE PatientFillHistory(
+    patient_id INT NOT NULL,
+    history INT NOT NULL,
+    FOREIGN KEY (history) REFERENCES MedicalHistory(id) ON DELETE CASCADE,
+    FOREIGN KEY (patient_id) REFERENCES patient(patient_id) ON DELETE CASCADE,
+    PRIMARY KEY (history, patient_id)
+);
+
+-- Diagnose Table
+CREATE TABLE Diagnose(
+    appt INT NOT NULL,
+    doctor VARCHAR(50) NOT NULL,
+    diagnosis VARCHAR(50) NOT NULL,
+    prescription VARCHAR(50) NOT NULL,
+    FOREIGN KEY (doctor) REFERENCES Doctor(email) ON DELETE CASCADE,
+    PRIMARY KEY (appt, doctor)
+);
+
+-- DocsHaveSchedule Table
+CREATE TABLE DocsHaveSchedule(
+    schedule INT NOT NULL,
+    doctor VARCHAR(50) NOT NULL,
+    FOREIGN KEY (doctor) REFERENCES Doctor(email) ON DELETE CASCADE,
+    PRIMARY KEY (schedule, doctor)
+);
+
+-- DoctorsViewHistory Table
+CREATE TABLE DoctorsViewHistory(
+    history INT NOT NULL,
+    doctor VARCHAR(50) NOT NULL,
+    FOREIGN KEY (doctor) REFERENCES Doctor(email) ON DELETE CASCADE,
+    PRIMARY KEY (history, doctor)
+);
+
+-- User Table (For Login)
+CREATE TABLE User(
+    user_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    password VARCHAR(100) NOT NULL, 
+    role ENUM('patient', 'admin') NOT NULL
+);
+
+-- Billing Table
+CREATE TABLE Billing(
+    bill_id INT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    patient_id INT NOT NULL,
+    total_amount DECIMAL(10,2) NOT NULL,
+    bill_date DATE NOT NULL,
+    status ENUM('Paid', 'Pending', 'Overdue') DEFAULT 'Pending' NOT NULL,
+    FOREIGN KEY (patient_id) REFERENCES patient(patient_id) ON DELETE CASCADE
+);
+
+DELIMITER $$
+
+-- Trigger to Update Appointment Status after Diagnosis
+CREATE TRIGGER UpdateAppointmentStatus
+AFTER UPDATE ON Diagnose
+FOR EACH ROW
+BEGIN
+    UPDATE Appointment
+    SET status = 'Completed'
+    WHERE id = NEW.appt;
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE TRIGGER UpdateBillingStatus
+AFTER UPDATE ON Billing
+FOR EACH ROW
+BEGIN
+    IF NEW.total_amount = 0 THEN
+        UPDATE Billing
+        SET status = 'Paid'
+        WHERE bill_id = NEW.bill_id;
+    END IF;
+END $$
+
+DELIMITER ;
+
+ALTER TABLE Appointment
+ADD COLUMN doctor_name VARCHAR(50) NOT NULL;
+CALL AddNewAppointment(101, '2024-12-31', '14:00:00', '15:00:00', 'Dr. Smith');
+ALTER TABLE Appointment
+ADD COLUMN patient_id INT NOT NULL;
+CREATE INDEX idx_patient_id ON Appointment(patient_id);
+CREATE INDEX idx_doctor_name ON Appointment(doctor_name);
+CREATE INDEX idx_billing_patient_id ON Billing(patient_id);
+
+DELIMITER $$
+
+CREATE PROCEDURE AddNewPatient(
+    IN p_email VARCHAR(50),
+    IN p_password VARCHAR(50),
+    IN p_name VARCHAR(50),
+    IN p_address VARCHAR(80),
+    IN p_gender VARCHAR(20),
+    IN p_age INT,
+    IN p_contact_number INT
+)
+BEGIN
+    INSERT INTO patient (email, password, name, address, gender, age, contact_number)
+    VALUES (p_email, p_password, p_name, p_address, p_gender, p_age, p_contact_number);
+END $$
+
+DELIMITER ;
+
+DELIMITER $$
+
+CREATE EVENT ArchiveOldAppointments
+ON SCHEDULE EVERY 1 DAY
+STARTS '2024-01-01 00:00:00'
+DO
+BEGIN
+    -- Insert old appointments into ArchivedAppointments
+    INSERT INTO ArchivedAppointments
+    SELECT * FROM Appointment WHERE date < CURDATE() - INTERVAL 1 YEAR;
+
+    -- Delete old appointments from Appointment table
+    DELETE FROM Appointment WHERE date < CURDATE() - INTERVAL 1 YEAR;
+END $$
+
+DELIMITER ;
+
+
+SHOW PROCEDURE STATUS WHERE Db = 'hospitalmanagementsystem';
+DELIMITER $$
+
+CREATE PROCEDURE AddNewAppointment(
+    IN appt_id INT,
+    IN appt_date DATE,
+    IN start_time TIME,
+    IN end_time TIME,
+    IN doctor_name VARCHAR(50)
+)
+BEGIN
+    INSERT INTO Appointment(id, date, starttime, endtime, status)
+    VALUES (appt_id, appt_date, start_time, end_time, 'Scheduled');
+
+    -- You may also need to add the doctor to the schedule or perform additional logic here.
+END $$
+
+DELIMITER ;
+
+ALTER TABLE Appointment MODIFY doctor_name VARCHAR(50) NULL;
+CALL AddNewAppointment(101, '2024-12-31', '14:00:00', '15:00:00', 'Dr. Smith');
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
